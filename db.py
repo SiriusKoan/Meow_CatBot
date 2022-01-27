@@ -3,7 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 db = SQLAlchemy()
 
 class Pair(db.Model):
-    __tablename__ = "pairs"
+    __tablename__ = "pair"
     id = db.Column(db.Integer, primary_key=True)
     chat_id = db.Column(db.Integer, nullable=False)
     keyword = db.Column(db.String, nullable=False)
