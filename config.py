@@ -1,2 +1,3 @@
-BOT_TOKEN = ""
-OWM_TOKEN = ""
+from os import getenv
+
+BOT_TOKEN = getenv("BOT_TOKEN")
