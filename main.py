@@ -5,7 +5,7 @@ from functions import *
 import config
 
 
-bot = telebot.TeleBot(config.BOT_TOKEN)
+bot = telebot.TeleBot(config.BOT_TOKEN, threaded=False)
 server = Flask(__name__)
 server.config.from_object(config.Config)
 db.init_app(server)
@@ -33,7 +33,7 @@ def start_command(message):
 
 @bot.message_handler(commands = ['teach'])
 def teach_command(message):
-    msg = message.text.split(",")
+    msg = message.text.split(" ")[1].split(",")
     if len(msg) == 2:
         teach(message.chat.id, msg[0], msg[1])
         bot.reply_to(message, f"Done: {msg[0]} -> {msg[1]}")
