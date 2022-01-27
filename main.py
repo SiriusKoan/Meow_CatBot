@@ -1,11 +1,18 @@
 import telebot
 from flask import Flask, request
+from db import db
 from functions import *
 import config
 
 
 bot = telebot.TeleBot(config.BOT_TOKEN)
 server = Flask(__name__)
+server.config.from_object(config.Config)
+db.init_app(server)
+
+@server.before_first_request
+def init_db():
+    db.create_all()
 
 @server.route("/" + config.BOT_TOKEN, methods=["POST"])
 def get_message():
@@ -17,7 +24,7 @@ def get_message():
 @server.route("/")
 def webhook():
     bot.remove_webhook()
-    bot.set_webhook(url=HEROKU_URL + BOT_TOKEN)
+    bot.set_webhook(url=config.HEROKU_URL + config.BOT_TOKEN)
     return ""
 
 @bot.message_handler(commands = ['start'])

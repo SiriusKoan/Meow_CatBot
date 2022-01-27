@@ -6,7 +6,7 @@ class Pair(db.Model):
     __tablename__ = "pairs"
     id = db.Column(db.Integer, primary_key=True)
     chat_id = db.Column(db.Integer, nullable=False)
-    keyword = db.Column(db.String, nullable=False, unique=True)
+    keyword = db.Column(db.String, nullable=False)
     reply = db.Column(db.String, nullable=False)
 
     def __init__(self, chat_id, keyword, reply):
