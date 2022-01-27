@@ -38,7 +38,7 @@ def list_all_command(message):
     commands = get_all_commands()
     out = ""
     for command in commands:
-        out += f"{command["keyword"]} -> {command["reply"]}\n"
+        out += f"{command['keyword']} -> {command['reply']}\n"
     bot.send_message(message.chat.id, out)
 
 @bot.message_handler(func = lambda msg: True)
