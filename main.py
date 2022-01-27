@@ -1,90 +1,51 @@
 import telebot
-from telebot import types
+from flask import Flask, request
 import sqlite3 as sql
 from functions import *
 import config
 
-                                            
-bot = telebot.TeleBot(config.BOT_TOKEN)
 
+bot = telebot.TeleBot(config.BOT_TOKEN)
+server = Flask(__name__)
+
+@server.route("/" + config.BOT_TOKEN, methods=["POST"])
+def get_message():
+    json_string = request.get_data().decode('utf-8')
+    update = telebot.types.Update.de_json(json_string)
+    bot.process_new_updates([update])
+    return ""
+
+@server.route("/")
+def webhook():
+    bot.remove_webhook()
+    bot.set_webhook(url=HEROKU_URL + BOT_TOKEN)
+    return ""
 
 @bot.message_handler(commands = ['start'])
-def start_main(message):
+def start_command(message):
     bot.reply_to(message, "Start successfully.")
-    bot.send_message(message.chat.id, "This bot is used for echoing 'meow'\nTyping /meow for meow ><")
-    start(message.chat.id)                    
 
 @bot.message_handler(commands = ['teach'])
-def teach_tip(message):
-    bot.reply_to(message, "Teach this bot to talk!\nFormat: keyword,bot's reply")
-    set_status("teach", message.chat.id)
-
-@bot.message_handler(commands = ['cancel'])
-def cancel(message):
-    set_status("none", message.chat.id)
-    bot.send_message(message.chat.id, "Cancel.")
+def teach_command(message):
+    msg = message.text.split(",")
+    if len(msg) == 2:
+        teach(message.chat.id, msg[0], msg[1])
+        bot.reply_to(message, f"Done: {msg[0]} -> {msg[1]}")
+    else:
+        bot.reply_to(message, "Format is not correct, the format should be `keyword,reply`")
 
 @bot.message_handler(commands = ['listallcommands'])
-def list_all(message):
-    con = sql.connect('data.db')
-    cur = con.cursor()
-    cur.execute('SELECT keyword, reply FROM pair')
-    commands = cur.fetchall()
-    con.close()
-
+def list_all_command(message):
+    commands = get_all_commands()
     out = ""
     for command in commands:
-        out = out + str(command) + '\n'
+        out += f"{command["keyword"]} -> {command["reply"]}\n"
     bot.send_message(message.chat.id, out)
 
-
 @bot.message_handler(func = lambda msg: True)
-def handle_normal_msg(message):
-    msg = message.text
-    chat_id = message.chat.id
-
-    con = sql.connect('data.db')
-    cur = con.cursor()
-    cur.execute('SELECT status FROM client WHERE chat_id = ?', (chat_id,))
-    status = cur.fetchall()
-    if status == []:
-        bot.send_message(chat_id, "You have to /start first.")
-    else:
-        status = status[0][0]
-    con.close()
-
-    if status == "teach":
-        if "," in msg:
-            teach(msg, chat_id)
-            bot.send_message(message.chat.id, "Success!")
-        else:
-            bot.reply_to(message, "The format is not correct...\nFormat: keyword,bot's reply")
-    elif status == "rm-select":
-        bot.send_message(chat_id, "Choose one reply you want to delete:", reply_markup = rm_select(msg, chat_id))
-    elif status == "rm-do":
-        rm_do(msg, chat_id)
-        # remove markup
-        bot.send_message(message.chat.id, "Success!", reply_markup = telebot.types.ReplyKeyboardRemove(selective=False))
-    elif status == "air":
-        reply = get_AQI(msg, chat_id)
-        if reply == None:
-            county = reply['County']
-            sitename = reply['SiteName']
-            AQI = reply['AQI']
-            status = reply['Status']
-            bot.send_message(chat_id, "*County:* %s\n*Site Name:* %s\n*AQI:* %s\n*Status:* %s"%(county, sitename, AQI, status), parse_mode="Markdown")
-        else:
-            bot.send_message(message.chat.id, "There is not this site...")
-    elif message.text.count("\\") == 1 and message.text.count("/") == 1 and message.text.index("\\") == 0 and message.text.index("/") == len(message.text) - 1:
-       bot.reply_to(message, "*%s*"%message.text, parse_mode = "Markdown")
-    else:
-        con = sql.connect("data.db")
-        cur = con.cursor()
-        cur.execute('SELECT reply FROM pair WHERE keyword = ?', (msg,))
-        out = cur.fetchall()
-        con.close()
-        if out != []:
-            bot.send_message(message.chat.id, out[random.randint(0, len(out)-1)])
-
+def reply_messages_handler(message):
+    reply = get_reply(message.text)
+    if reply:
+        bot.send_message(message.chat.id, reply)
 
 bot.polling()
