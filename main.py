@@ -1,7 +1,7 @@
 import telebot
 from flask import Flask, request
 from db import db
-from functions import *
+from functions import teach, get_reply, get_all_commands
 import config
 
 
@@ -54,4 +54,3 @@ def reply_messages_handler(message):
     if reply:
         bot.send_message(message.chat.id, reply)
 
-bot.polling()
