@@ -33,12 +33,16 @@ def start_command(message):
 
 @bot.message_handler(commands = ['teach'])
 def teach_command(message):
-    msg = message.text.split(" ")[1].split(",")
+    msg = message.text.split(" ")
     if len(msg) == 2:
-        teach(message.chat.id, msg[0], msg[1])
-        bot.reply_to(message, f"Done: {msg[0]} -> {msg[1]}")
+        msg = msg[1].split(",")
+        if len(msg) == 2:
+            teach(message.chat.id, msg[0], msg[1])
+            bot.reply_to(message, f"Done: {msg[0]} -> {msg[1]}")
+        else:
+            bot.reply_to(message, "Format is not correct, the format should be `keyword,reply`.")
     else:
-        bot.reply_to(message, "Format is not correct, the format should be `keyword,reply`")
+        bot.reply_to(message, "No content, the format should be `/teach keyword,reply`.")
 
 @bot.message_handler(commands = ['listallcommands'])
 def list_all_command(message):
