@@ -1,0 +1,11 @@
+services:
+  meow-catbot:
+    build:
+      context: .
+    env_file:
+      - .env
+    restart: unless-stopped
+    environment:
+      DATABASE_URI: ${DATABASE_URI:-sqlite:////app/data/data.db}
+    volumes:
+      - ./data:/app/data
