@@ -1,3 +1,4 @@
+import html
 import logging
 
 import telebot
@@ -15,6 +16,16 @@ logger = logging.getLogger(__name__)
 bot = telebot.TeleBot(config.BOT_TOKEN, threaded=False)
 init_db()
 logger.info("Database initialized")
+
+
+def extract_bold_echo(text):
+    if not text or len(text) < 3:
+        return None
+    if text.startswith("\\") and text.endswith("/"):
+        content = text[1:-1]
+        if content:
+            return content
+    return None
 
 
 @bot.message_handler(commands=["start"])
@@ -57,6 +68,15 @@ def reply_messages_handler(message):
     logger.info(
         "Handling message for chat_id=%s text=%r", message.chat.id, message.text
     )
+    bold_echo = extract_bold_echo(message.text)
+    if bold_echo:
+        logger.info("Matched bold echo pattern for chat_id=%s", message.chat.id)
+        bot.send_message(
+            message.chat.id,
+            f"<b>{html.escape(bold_echo)}</b>",
+            parse_mode="HTML",
+        )
+        return
     reply = get_reply(message.text)
     if reply:
         bot.send_message(message.chat.id, reply)
