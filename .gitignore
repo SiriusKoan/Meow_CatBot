@@ -1,4 +1,5 @@
 .vscode/
+.venv/
 *.db
 *.log
 log/*

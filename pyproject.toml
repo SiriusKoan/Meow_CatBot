@@ -1,0 +1,16 @@
+[project]
+name = "meow-catbot"
+version = "0.1.0"
+description = "Telegram cat bot backed by Flask and SQLAlchemy."
+readme = "README.md"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+    "flask",
+    "flask-sqlalchemy",
+    "gunicorn",
+    "psycopg2-binary",
+    "pytelegrambotapi",
+]
+
+[tool.uv]
+package = false
