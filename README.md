@@ -10,8 +10,25 @@ This project uses `uv` for environment and dependency management.
 ```bash
 uv python install 3.12.11
 uv sync
-uv run gunicorn main:server
+uv run python main.py
 ```
+
+## docker
+Run the bot with Docker Compose:
+
+```bash
+sudo docker compose up --build -d
+```
+
+Docker Compose loads variables from `.env`.
+
+Required environment variables:
+
+- `BOT_TOKEN`
+
+Optional environment variable:
+
+- `DATABASE_URI` defaults to `sqlite:////app/data/data.db`
 
 ## commands
 `/teach`
