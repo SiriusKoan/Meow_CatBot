@@ -4,6 +4,7 @@ import logging
 
 import telebot
 from google import genai
+from command_parsing import parse_teach_command_text
 from db import Session, init_db
 from functions import teach, get_reply, get_all_commands
 import config
@@ -161,20 +162,22 @@ def teach_command(message):
     logger.info("Handling /teach for chat_id=%s text=%r", message.chat.id, message.text)
     add_history(message.chat.id, "user", message.text, get_sender_name(message),
                 message_id=message.message_id, reply_to=get_reply_to(message))
-    msg = message.text.split(" ")
-    if len(msg) == 2:
-        msg = msg[1].split(",")
-        if len(msg) == 2:
-            teach(message.chat.id, msg[0], msg[1])
-            send_and_record(message.chat.id, f"Done: {msg[0]} -> {msg[1]}")
-        else:
-            send_and_record(
-                message.chat.id, "Format is not correct, the format should be `keyword,reply`."
-            )
-    else:
+    try:
+        keyword, reply = parse_teach_command_text(message.text)
+    except ValueError:
+        send_and_record(
+            message.chat.id, "Format is not correct, the format should be `keyword,reply`."
+        )
+        return
+
+    if keyword is None:
         send_and_record(
             message.chat.id, "No content, the format should be `/teach keyword,reply`."
         )
+        return
+
+    teach(message.chat.id, keyword, reply)
+    send_and_record(message.chat.id, f"Done: {keyword} -> {reply}")
 
 
 @bot.message_handler(commands=["listallcommands"])
