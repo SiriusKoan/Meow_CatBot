@@ -20,7 +20,11 @@ def teach(chat_id, keyword, reply):
 def get_reply(keyword):
     session = Session()
     try:
-        exact_records = session.query(Pair).filter_by(keyword=keyword).all()
+        records = session.query(Pair).all()
+        folded_keyword = keyword.casefold()
+        exact_records = [
+            record for record in records if record.keyword.casefold() == folded_keyword
+        ]
         if exact_records:
             logger.info(
                 "Matched exact keyword=%r with %s candidate replies",
@@ -30,9 +34,9 @@ def get_reply(keyword):
             return random.choice(exact_records).reply
 
         regex_records = []
-        for record in session.query(Pair).all():
+        for record in records:
             try:
-                if re.fullmatch(record.keyword, keyword):
+                if re.fullmatch(record.keyword, keyword, flags=re.IGNORECASE):
                     regex_records.append(record)
             except re.error:
                 logger.warning("Skipped invalid regex keyword=%r", record.keyword)
