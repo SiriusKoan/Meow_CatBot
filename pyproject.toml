@@ -5,6 +5,7 @@ description = "Telegram cat bot backed by SQLAlchemy."
 readme = "README.md"
 requires-python = ">=3.12,<3.15"
 dependencies = [
+    "google-genai",
     "psycopg2-binary",
     "pytelegrambotapi",
     "sqlalchemy",

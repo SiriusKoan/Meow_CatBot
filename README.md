@@ -25,10 +25,13 @@ Docker Compose loads variables from `.env`.
 Required environment variables:
 
 - `BOT_TOKEN`
+- `GEMINI_API_KEY`
 
 Optional environment variable:
 
 - `DATABASE_URI` defaults to `sqlite:////app/data/data.db`
+- `GEMINI_MODEL` defaults to `gemma-4-26b-a4b-it`
+- `CHAT_HISTORY_MAX_LENGTH` defaults to `30`
 
 ## commands
 `/teach`
