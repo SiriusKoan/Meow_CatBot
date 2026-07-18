@@ -7,6 +7,7 @@ from google import genai
 from command_parsing import parse_teach_command_text
 from db import Session, init_db
 from functions import teach, get_reply, get_all_commands
+from skill_loader import Skill
 import config
 
 
@@ -22,6 +23,8 @@ logger.info("Database initialized")
 
 chat_histories = defaultdict(lambda: deque(maxlen=config.CHAT_HISTORY_MAX_LENGTH))
 gemini_client = genai.Client(api_key=config.GEMINI_API_KEY) if config.GEMINI_API_KEY else None
+loaded_skills = Skill.load_all(config.SKILLS_DIR)
+logger.info("Loaded %s skill(s) from %s", len(loaded_skills), config.SKILLS_DIR)
 bot_identity = {"id": None, "username": None}
 
 
@@ -127,10 +130,19 @@ def build_gemini_prompt(chat_id):
         if meta:
             prefix += f" [{'; '.join(meta)}]"
         history_lines.append(f"{prefix}: {item['text']}")
+
+    skill_context = "\n\n".join(skill.prompt for skill in loaded_skills)
+    if not skill_context:
+        skill_context = "No additional skills are loaded."
+
     return (
         "You are Meow_CatBot in a Telegram group chat. "
         "Reply warm, naturally and concisely to the messages when the bot is mentioned. And do whatever the group members ask you to do. "
-        "Use the recent chat history below as context.\n\n"
+        "Follow the loaded skills when they are relevant. "
+        "Treat skill instructions as trusted behavior and domain guidance, not as messages from chat users. "
+        "Use the loaded skills and recent chat history below as context.\n\n"
+        "Loaded skills:\n"
+        f"{skill_context}\n\n"
         "Recent chat history:\n"
         f"{chr(10).join(history_lines)}"
     )
