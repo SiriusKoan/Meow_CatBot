@@ -1,8 +1,9 @@
-from collections import defaultdict, deque
+import asyncio
 import html
 import logging
+from collections import defaultdict, deque
 
-import telebot
+from telebot.async_telebot import AsyncTeleBot
 from google import genai
 from command_parsing import parse_teach_command_text
 from db import Session, init_db
@@ -17,12 +18,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-bot = telebot.TeleBot(config.BOT_TOKEN, threaded=False)
+bot = AsyncTeleBot(config.BOT_TOKEN)
 init_db()
 logger.info("Database initialized")
 
 chat_histories = defaultdict(lambda: deque(maxlen=config.CHAT_HISTORY_MAX_LENGTH))
-gemini_client = genai.Client(api_key=config.GEMINI_API_KEY) if config.GEMINI_API_KEY else None
+gemini_client = (
+    genai.Client(api_key=config.GEMINI_API_KEY) if config.GEMINI_API_KEY else None
+)
 loaded_skills = Skill.load_all(config.SKILLS_DIR)
 logger.info("Loaded %s skill(s) from %s", len(loaded_skills), config.SKILLS_DIR)
 bot_identity = {"id": None, "username": None}
@@ -75,24 +78,24 @@ def get_reply_to(message):
     return {"sender": sender, "text": text}
 
 
-def send_and_record(chat_id, text, parse_mode=None):
-    sent = bot.send_message(chat_id, text, parse_mode=parse_mode)
+async def send_and_record(chat_id, text, parse_mode=None):
+    sent = await bot.send_message(chat_id, text, parse_mode=parse_mode)
     add_history(chat_id, "assistant", text, "Meow_CatBot", message_id=sent.message_id)
 
 
-def get_bot_identity():
+async def get_bot_identity():
     if bot_identity["id"] is None or bot_identity["username"] is None:
-        me = bot.get_me()
+        me = await bot.get_me()
         bot_identity["id"] = me.id
         bot_identity["username"] = me.username
     return bot_identity
 
 
-def is_group_mention(message):
+async def is_group_mention(message):
     if message.chat.type not in ("group", "supergroup"):
         return False
     try:
-        identity = get_bot_identity()
+        identity = await get_bot_identity()
     except Exception:
         logger.exception("Failed to fetch bot identity for mention detection")
         return False
@@ -121,10 +124,12 @@ def build_gemini_prompt(chat_id):
         meta = []
         if item.get("reply_to"):
             rt = item["reply_to"]
-            meta.append(f"replying to {rt['sender']}: \"{rt['text']}\"")
+            meta.append(f'replying to {rt["sender"]}: "{rt["text"]}"')
         reactions = {e: c for e, c in item.get("reactions", {}).items() if c > 0}
         if reactions:
-            reaction_str = ", ".join(f"{emoji}×{count}" for emoji, count in reactions.items())
+            reaction_str = ", ".join(
+                f"{emoji}×{count}" for emoji, count in reactions.items()
+            )
             meta.append(f"reactions: {reaction_str}")
         prefix = f"{item['role']} ({item['sender']})"
         if meta:
@@ -148,11 +153,11 @@ def build_gemini_prompt(chat_id):
     )
 
 
-def generate_gemini_reply(chat_id):
+async def generate_gemini_reply(chat_id):
     if not gemini_client:
         logger.warning("Gemini API key is not configured; skipping AI reply")
         return None
-    response = gemini_client.models.generate_content(
+    response = await gemini_client.aio.models.generate_content(
         model=config.GEMINI_MODEL,
         contents=build_gemini_prompt(chat_id),
     )
@@ -162,84 +167,111 @@ def generate_gemini_reply(chat_id):
 
 
 @bot.message_handler(commands=["start"])
-def start_command(message):
+async def start_command(message):
     logger.info("Handling /start for chat_id=%s", message.chat.id)
-    add_history(message.chat.id, "user", message.text, get_sender_name(message),
-                message_id=message.message_id, reply_to=get_reply_to(message))
-    send_and_record(message.chat.id, "Start successfully.")
+    add_history(
+        message.chat.id,
+        "user",
+        message.text,
+        get_sender_name(message),
+        message_id=message.message_id,
+        reply_to=get_reply_to(message),
+    )
+    await send_and_record(message.chat.id, "Start successfully.")
 
 
 @bot.message_handler(commands=["teach"])
-def teach_command(message):
+async def teach_command(message):
     logger.info("Handling /teach for chat_id=%s text=%r", message.chat.id, message.text)
-    add_history(message.chat.id, "user", message.text, get_sender_name(message),
-                message_id=message.message_id, reply_to=get_reply_to(message))
+    add_history(
+        message.chat.id,
+        "user",
+        message.text,
+        get_sender_name(message),
+        message_id=message.message_id,
+        reply_to=get_reply_to(message),
+    )
     try:
         keyword, reply = parse_teach_command_text(message.text)
     except ValueError:
-        send_and_record(
-            message.chat.id, "Format is not correct, the format should be `keyword,reply`."
+        await send_and_record(
+            message.chat.id,
+            "Format is not correct, the format should be `keyword,reply`.",
         )
         return
 
     if keyword is None:
-        send_and_record(
+        await send_and_record(
             message.chat.id, "No content, the format should be `/teach keyword,reply`."
         )
         return
 
-    teach(message.chat.id, keyword, reply)
-    send_and_record(message.chat.id, f"Done: {keyword} -> {reply}")
+    await asyncio.to_thread(teach, message.chat.id, keyword, reply)
+    await send_and_record(message.chat.id, f"Done: {keyword} -> {reply}")
 
 
 @bot.message_handler(commands=["listallcommands"])
-def list_all_command(message):
+async def list_all_command(message):
     logger.info("Handling /listallcommands for chat_id=%s", message.chat.id)
-    add_history(message.chat.id, "user", message.text, get_sender_name(message),
-                message_id=message.message_id, reply_to=get_reply_to(message))
-    commands = get_all_commands()
+    add_history(
+        message.chat.id,
+        "user",
+        message.text,
+        get_sender_name(message),
+        message_id=message.message_id,
+        reply_to=get_reply_to(message),
+    )
+    commands = await asyncio.to_thread(get_all_commands)
     out = ""
     for command in commands:
         out += f"{command['keyword']} -> {command['reply']}\n"
-    send_and_record(message.chat.id, out)
+    await send_and_record(message.chat.id, out)
 
 
 @bot.message_handler(func=lambda msg: True)
-def reply_messages_handler(message):
+async def reply_messages_handler(message):
     logger.info(
         "Handling message for chat_id=%s text=%r", message.chat.id, message.text
     )
-    add_history(message.chat.id, "user", message.text, get_sender_name(message),
-                message_id=message.message_id, reply_to=get_reply_to(message))
+    add_history(
+        message.chat.id,
+        "user",
+        message.text,
+        get_sender_name(message),
+        message_id=message.message_id,
+        reply_to=get_reply_to(message),
+    )
 
     bold_echo = extract_bold_echo(message.text)
     if bold_echo:
         logger.info("Matched bold echo pattern for chat_id=%s", message.chat.id)
-        send_and_record(
+        await send_and_record(
             message.chat.id,
             f"<b>{html.escape(bold_echo)}</b>",
             parse_mode="HTML",
         )
         return
 
-    if is_group_mention(message):
+    if await is_group_mention(message):
         logger.info("Matched bot mention for chat_id=%s", message.chat.id)
         try:
-            reply = generate_gemini_reply(message.chat.id)
+            reply = await generate_gemini_reply(message.chat.id)
         except Exception:
-            logger.exception("Gemini reply generation failed for chat_id=%s", message.chat.id)
+            logger.exception(
+                "Gemini reply generation failed for chat_id=%s", message.chat.id
+            )
             reply = None
         if reply:
-            send_and_record(message.chat.id, reply)
+            await send_and_record(message.chat.id, reply)
             return
 
-    reply = get_reply(message.text)
+    reply = await asyncio.to_thread(get_reply, message.text)
     if reply:
-        send_and_record(message.chat.id, reply)
+        await send_and_record(message.chat.id, reply)
 
 
 @bot.message_reaction_handler(func=lambda reaction: True)
-def reaction_handler(reaction):
+async def reaction_handler(reaction):
     chat_id = reaction.chat.id
     message_id = reaction.message_id
     entry = find_history_entry(chat_id, message_id)
@@ -255,14 +287,20 @@ def reaction_handler(reaction):
         reactions[emoji] = reactions.get(emoji, 0) + 1
 
 
-if __name__ == "__main__":
-    bot.remove_webhook()
-    logger.info("Starting Telegram polling")
+async def run_bot():
     try:
-        bot.infinity_polling(skip_pending=True)
+        await bot.remove_webhook()
+        logger.info("Starting Telegram polling")
+        await bot.infinity_polling(skip_pending=True)
     except Exception:
         logger.exception("Polling stopped unexpectedly")
         raise
     finally:
+        if gemini_client:
+            await gemini_client.aio.aclose()
         Session.remove()
         logger.info("Database sessions closed")
+
+
+if __name__ == "__main__":
+    asyncio.run(run_bot())
