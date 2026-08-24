@@ -2,6 +2,7 @@ import asyncio
 import html
 import logging
 from collections import defaultdict, deque
+from contextlib import asynccontextmanager
 
 from telebot.async_telebot import AsyncTeleBot
 from google import genai
@@ -29,6 +30,7 @@ gemini_client = (
 loaded_skills = Skill.load_all(config.SKILLS_DIR)
 logger.info("Loaded %s skill(s) from %s", len(loaded_skills), config.SKILLS_DIR)
 bot_identity = {"id": None, "username": None}
+TYPING_REFRESH_INTERVAL = 4
 
 
 def extract_bold_echo(text):
@@ -81,6 +83,33 @@ def get_reply_to(message):
 async def send_and_record(chat_id, text, parse_mode=None):
     sent = await bot.send_message(chat_id, text, parse_mode=parse_mode)
     add_history(chat_id, "assistant", text, "Meow_CatBot", message_id=sent.message_id)
+
+
+async def _refresh_typing(chat_id):
+    try:
+        while True:
+            await asyncio.sleep(TYPING_REFRESH_INTERVAL)
+            try:
+                await bot.send_chat_action(chat_id, "typing")
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception(
+                    "Failed to refresh typing status for chat_id=%s", chat_id
+                )
+    except asyncio.CancelledError:
+        raise
+
+
+@asynccontextmanager
+async def typing_status(chat_id):
+    await bot.send_chat_action(chat_id, "typing")
+    refresh_task = asyncio.create_task(_refresh_typing(chat_id))
+    try:
+        yield
+    finally:
+        refresh_task.cancel()
+        await asyncio.gather(refresh_task, return_exceptions=True)
 
 
 async def get_bot_identity():
@@ -202,7 +231,8 @@ async def teach_command(message):
 
     if keyword is None:
         await send_and_record(
-            message.chat.id, "No content, the format should be `/teach keyword,reply`."
+            message.chat.id,
+            "No content, the format should be `/teach keyword,reply`.",
         )
         return
 
@@ -245,25 +275,27 @@ async def reply_messages_handler(message):
     bold_echo = extract_bold_echo(message.text)
     if bold_echo:
         logger.info("Matched bold echo pattern for chat_id=%s", message.chat.id)
-        await send_and_record(
-            message.chat.id,
-            f"<b>{html.escape(bold_echo)}</b>",
-            parse_mode="HTML",
-        )
+        async with typing_status(message.chat.id):
+            await send_and_record(
+                message.chat.id,
+                f"<b>{html.escape(bold_echo)}</b>",
+                parse_mode="HTML",
+            )
         return
 
     if await is_group_mention(message):
         logger.info("Matched bot mention for chat_id=%s", message.chat.id)
-        try:
-            reply = await generate_gemini_reply(message.chat.id)
-        except Exception:
-            logger.exception(
-                "Gemini reply generation failed for chat_id=%s", message.chat.id
-            )
-            reply = None
-        if reply:
-            await send_and_record(message.chat.id, reply)
-            return
+        async with typing_status(message.chat.id):
+            try:
+                reply = await generate_gemini_reply(message.chat.id)
+            except Exception:
+                logger.exception(
+                    "Gemini reply generation failed for chat_id=%s", message.chat.id
+                )
+                reply = None
+            if reply:
+                await send_and_record(message.chat.id, reply)
+                return
 
     reply = await asyncio.to_thread(get_reply, message.text)
     if reply:
